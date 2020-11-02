@@ -1,0 +1,16 @@
+name: aquagym
+channels:
+- defaults
+- anaconda
+- conda-forge
+dependencies:
+- python>=3.7
+- gym
+- setuptools
+- numpy
+- matplotlib
+- seaborn
+- cudatoolkit=10.1
+- tensorflow-gpu=2.1
+- tensorflow-estimator=2.1
+- keras
