@@ -138,7 +138,8 @@ def DQN(environment, actions, neural_network, trials, max_iter=10000, epsilon_de
             
         # episode ended
         score_queue.append(episode_total_reward)
-        if episode_total_reward > -10:
+        # identify ending-state using last reward
+        if reward > 0:
             # goal score reached (goal reached with less than 1000 moves)
             print("trial #{}: reached goal after {} moves".format(i, iteration))
             break
