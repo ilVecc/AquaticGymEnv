@@ -51,23 +51,22 @@ class AquaSmallEnv(gym.Env):
                        shape=[2], dtype=np.float32)
         
         if scenario == 0:
-            # TODO altri
-            pass
-        elif scenario == 1:
             self.obstacles = [
                 # x    y  type  radius/(width,heigth)
-                (150, 750, "c", 50),
-                (200, 350, "c", 100),
-                (350, 550, "r", (50, 50)),
-                (450, 200, "r", (100, 100)),
-                (550, 700, "c", 100),
-                (650, 350, "c", 50),
-                (650, 850, "r", (50, 50)),
-                (800, 550, "c", 100),
-                (850, 200, "c", 100),
-                (850, 750, "c", 50)]
+                # (150, 750, "c", 50),
+                # (200, 350, "c", 100),
+                # (350, 550, "r", (50, 50)),
+                # (450, 200, "r", (100, 100)),
+                # (550, 700, "c", 100),
+                # (650, 350, "c", 50),
+                # (650, 850, "r", (50, 50)),
+                # (800, 550, "c", 100),
+                # (850, 200, "c", 100),
+                # (850, 750, "c", 50)
+            ]
             self.goal = np.array([150, 650, 25], dtype=np.float32)
         else:
+            # TODO add more scenarios
             raise Exception('No scenario available at that index!')
         
         # world dynamics
@@ -148,7 +147,7 @@ class AquaSmallEnv(gym.Env):
         # REWARD AND GOAL
         reward = self.reward_step
         done = False
-        if self._has_collided_obstacle():
+        if self._has_collided_obstacle() or self._has_collided_border():
             reward = self.reward_collision
             done = True
         elif self._has_reached_goal():

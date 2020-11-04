@@ -107,6 +107,7 @@ def DQN(environment, actions, neural_network, trials, max_iter=10000, epsilon_de
         s = (environment.reset())[np.newaxis, :]
         episode_total_reward = 0
         iteration = 0
+        successes = 0
         while True:
             # epsilon greedy implementation
             a = epsilon_greedy(neural_network, s, epsilon)
@@ -128,9 +129,9 @@ def DQN(environment, actions, neural_network, trials, max_iter=10000, epsilon_de
             if done:
                 # reached goal state
                 break
-            if iteration > max_iter:
+            if max_iter is not None and iteration > max_iter:
                 # too many moves
-                print("trial #{}: too many moves".format(i))
+                print("trial #{}: reached maximum number of moves ({})".format(i, max_iter))
                 break
                 
             s = next_state
@@ -142,8 +143,11 @@ def DQN(environment, actions, neural_network, trials, max_iter=10000, epsilon_de
         if reward > 0:
             # goal score reached (goal reached with less than 1000 moves)
             print("trial #{}: reached goal after {} moves".format(i, iteration))
-            break
+            successes += 1
+            if successes > 10:
+                break
         else:
-            print("trial #{}: collided after {} moves".format(i, iteration))
+            if not iteration > max_iter:
+                print("trial #{}: collided after {} moves".format(i, iteration))
     
     return neural_network, score_queue
