@@ -1,91 +1,15 @@
-from collections import deque
+import math
 
 import gym
 import numpy as np
 from gym import spaces
 
 
-class MovementStats:
-    """
-    Constructs a buffer object that stores the past moves
-    """
-    
-    def __init__(self, history_length, sampling_period, init_state):
-        self.buffer_size = history_length
-        self.count = 0
-        self.buffer_position = deque()
-        self.buffer_position.append((init_state[0], init_state[1], init_state[2]))
-        self.buffer_velocity = deque()
-        self.sampling_period = sampling_period
-    
-    def add(self, state):
-        """
-        Add the last state to the buffer.
-
-        Args:
-            state: last state (pos_x, pos_y, angle)
-        """
-        last_state = self.buffer_position[-1]
-        velocity = tuple((state - last_state) / self.sampling_period)
-        if self.count < self.buffer_size:
-            self.buffer_position.append(state)
-            self.buffer_velocity.append(velocity)
-            self.count += 1
-        else:
-            self.buffer_position.popleft()
-            self.buffer_position.append(state)
-            self.buffer_velocity.popleft()
-            self.buffer_velocity.append(velocity)
-    
-    def size(self):
-        return self.count
-    
-    def is_stuck(self):
-        """
-        Infer from the history of positions whether the boat is actually moving somewhere
-        """
-        
-        if self.count < self.buffer_size:
-            # too few positions
-            return False
-        else:
-            
-            history_position = np.array(list(zip(*self.buffer_position))).T
-            history_velocity = np.array(list(zip(*self.buffer_velocity))).T
-            position_mean = np.mean(history_position, axis=0)
-            velocity_mean = np.mean(history_velocity, axis=0)
-            position_variance = np.var(history_position, axis=0)
-            velocity_variance = np.var(history_velocity, axis=0)
-            
-            overall_position_variance = np.linalg.norm(position_variance[0:2])
-            overall_velocity_variance = np.linalg.norm(velocity_variance[0:2])
-            
-            if position_variance[2] > 0 and velocity_variance[2] < 0.01:  # it's just rotating
-                with np.printoptions(precision=3, suppress=False):
-                    print("ROTATION: \t", position_variance, velocity_variance, "\t",
-                          position_variance / velocity_variance)
-                return True
-            
-            if overall_position_variance < 3:  # moving too slow or even just idling
-                with np.printoptions(precision=3, suppress=False):
-                    print("MOVEMENT: \t", overall_position_variance, overall_velocity_variance,
-                          "\t",
-                          overall_position_variance / overall_velocity_variance)
-                return True
-            
-            return False
-    
-    def clear(self):
-        self.buffer_position.clear()
-        self.buffer_velocity.clear()
-        self.count = 0
-
-
 class AquaSmallEnv(gym.Env):
     """
     World size: [0, 100] x [0, 100] pix^2
-    Motor speed:     [ -0.3,  +0.3] pix/s
-    Waves speed:     [ -0.1,  +0.1] pix/s
+    Motor speed:   [  -0.3,   +0.3] pix/s
+    Waves speed:   [ -0.05,  +0.05] pix/s
     Waves speed variance:     0.001 pix/s
     """
     metadata = {'render.modes': ['human']}
@@ -96,8 +20,8 @@ class AquaSmallEnv(gym.Env):
         self.world_size = 100
         self.motor_min_thrust = -0.3
         self.motor_max_thrust = +0.3
-        self.wave_min_speed = -0.1
-        self.wave_max_speed = +0.1
+        self.wave_min_speed = -0.05
+        self.wave_max_speed = +0.05
         self.wave_speed_variance = 0.001
         
         # env spaces
@@ -111,6 +35,7 @@ class AquaSmallEnv(gym.Env):
                                      self.wave_max_speed,
                                      shape=[2], dtype=np.float64)  # vx, vy
         
+        # obstacles and goal
         if with_obstacles:
             self.obstacles = [
                 # x    y  type  radius/(width,heigth)
@@ -127,36 +52,25 @@ class AquaSmallEnv(gym.Env):
             ]
         else:
             self.obstacles = []
-        self.goal = np.array([15, 65], dtype=np.float64)
+        self.goal_state = np.array([15, 65], dtype=np.float64)
         self.goal_radius = 2.5
-        self.boat_radius = 2.5
         
         # world dynamics
         self.wave_speed = np.zeros(2, dtype=np.float64)
         
         # internal state
+        self.boat_radius = 2.5
         self.position = np.array([55, 30], dtype=np.float64)
         self.angle = None
         self.thrust_left = None
         self.thrust_right = None
         self.thrust_total = None
-        self.trajectory = None
         self.time = None
         
         # reward
         self.reward_goal = lambda: +100
-        # LINEAR 1
-        # self.reward_max_steps = lambda: self.reward_goal() / max(1, self._distance_from_goal())
-        # LINEAR 2
-        init_distance = self._distance_from_goal()
-        self.reward_max_steps = lambda: self.reward_goal() * \
-                                        (1 - self._distance_from_goal() / init_distance)
-        # GAUSSIAN
-        # std = 15
-        # self.reward_max_steps = lambda: self.reward_goal() * np.exp(
-        #     -1/2 * self._distance_from_goal() ** 2 / std ** 2)
-        # self.reward_idle = lambda: -60 - self._distance_from_goal()
-        self.reward_collision = lambda: -200 + self.reward_max_steps()
+        self.reward_max_steps = lambda: -100
+        self.reward_collision = lambda: -100
         self.reward_step = lambda: -0.1
         self.time_limit = 1000
         
@@ -177,8 +91,13 @@ class AquaSmallEnv(gym.Env):
         self.wave_speed = self.wave_space.sample()
         self.time = 0
         state = np.array([self.position[0], self.position[1], self.angle])
-        self.trajectory = MovementStats(100, self.tau, state)
         return state
+    
+    @staticmethod
+    def normalize_angle(value, range_start, range_end):
+        width = range_end - range_start
+        offset_value = value - range_start
+        return (offset_value - (math.floor(offset_value / width) * width)) + range_start
     
     def step(self, action: np.ndarray):
         action = np.array(action, dtype=np.float64)
@@ -213,6 +132,10 @@ class AquaSmallEnv(gym.Env):
             rot = np.array([[c, -s], [s, c]])
             self.position = rot.dot(self.position - self.ICC) + self.ICC
             self.angle += w * self.tau
+            # basically angle <- angle - 2pi * floor((angle + pi) / 2pi)
+            self.angle = self.normalize_angle(self.angle,
+                                              self.observation_space.low[2],
+                                              self.observation_space.high[2])
         else:
             # LINEAR MOTION
             # self.angle remains the same
@@ -222,7 +145,6 @@ class AquaSmallEnv(gym.Env):
         
         # add waves contribution
         self.position += self.wave_speed * self.tau
-        self.trajectory.add(np.array([self.position[0], self.position[1], self.angle]))
         
         # UPDATE WAVES
         diff = np.random.uniform(-self.wave_speed_variance, self.wave_speed_variance, 2)
@@ -238,14 +160,14 @@ class AquaSmallEnv(gym.Env):
             'Termination.time': False,
         }
         done = False
-        if self._has_collided_obstacle() or self._has_collided_border():
+        if self._has_collided_obstacle():
             info['Termination.collided'] = True
             reward = self.reward_collision()
             done = True
-        # elif self.trajectory.is_stuck():
-        #     info['Termination.stuck'] = True
-        #     reward = self.reward_idle()
-        #     done = True
+        elif self._has_collided_border():
+            info['Termination.collided'] = True
+            reward = self.reward_collision()
+            done = True
         elif self._has_reached_goal():
             reward = self.reward_goal()
             done = True
@@ -354,7 +276,7 @@ class AquaSmallEnv(gym.Env):
                 self.viewer.add_geom(view_obs)
             
             # DRAW GOAL
-            goal = self.goal * self.scale
+            goal = self.goal_state * self.scale
             goal_radius = self.goal_radius * self.scale
             view_goal = rendering.make_circle(goal_radius)
             view_goal.set_color(*goal_color)
@@ -465,41 +387,45 @@ class AquaSmallEnv(gym.Env):
         if self.viewer:
             self.viewer.close()
             self.viewer = None
-        self.trajectory.clear()
     
     @staticmethod
-    def _distance_circles(this_pos, this_radius, that_pos, that_radius):
-        centers_dist = np.linalg.norm(this_pos - that_pos)
-        total_radius_length = this_radius + that_radius
+    def _distance_circles(obs_pos, obs_radius, boat_pos, boat_radius):
+        centers_dist = np.linalg.norm(obs_pos - boat_pos)
+        total_radius_length = obs_radius + boat_radius
         return centers_dist - total_radius_length
     
+    @staticmethod
+    def _distance_rectangle(obs_pos, obs_dimensions, boat_pos, boat_radius):
+        obs_l = obs_pos[0] - obs_dimensions[0] / 2
+        obs_r = obs_pos[0] + obs_dimensions[0] / 2
+        obs_b = obs_pos[1] - obs_dimensions[1] / 2
+        obs_t = obs_pos[1] + obs_dimensions[1] / 2
+        # find nearest point of obstacle border from center of circle
+        min_values = np.array([obs_l, obs_b])
+        max_values = np.array([obs_r, obs_t])
+        dist = boat_pos - np.clip(boat_pos, min_values, max_values)
+        # return actual distance between boat border and obstacle border
+        return np.linalg.norm(dist) - boat_radius
+    
     def _distance_from_goal(self):
-        return self._distance_circles(self.goal, self.goal_radius, self.position, self.boat_radius)
+        return self._distance_circles(self.goal_state, self.goal_radius,
+                                      self.position, self.boat_radius)
     
     def _has_collided_obstacle(self):
         result = False
         for obs_x, obs_y, obs_type, obs_dim in self.obstacles:
+            obs_pos = np.array([obs_x, obs_y])
             if obs_type == 'c':
-                dist = self._distance_circles(np.array([obs_x, obs_y]), obs_dim,
-                                              self.position, self.boat_radius)
+                dist = self._distance_circles(obs_pos, obs_dim, self.position, self.boat_radius)
                 result |= dist <= 0
             else:
-                obs_l = obs_x - obs_dim[0] / 2
-                obs_r = obs_x + obs_dim[0] / 2
-                obs_b = obs_y - obs_dim[1] / 2
-                obs_t = obs_y + obs_dim[1] / 2
-                # find nearest point to circle
-                dist_x = self.position[0] - np.clip(self.position[0], obs_l, obs_r)
-                dist_y = self.position[1] - np.clip(self.position[1], obs_b, obs_t)
-                dist = np.linalg.norm([dist_x, dist_y])
-                result |= dist <= self.boat_radius
+                dist = self._distance_rectangle(obs_pos, obs_dim, self.position, self.boat_radius)
+                result |= dist <= 0
         return result
     
     def _has_reached_goal(self):
         return self._distance_from_goal() <= 0
     
     def _has_collided_border(self):
-        return self.position[0] - self.boat_radius < 0 \
-               or self.position[0] + self.boat_radius > self.world_size \
-               or self.position[1] - self.boat_radius < 0 \
-               or self.position[1] + self.boat_radius > self.world_size
+        return np.any(self.position - self.boat_radius < self.observation_space.low[0:2]) \
+               or np.any(self.position - self.boat_radius > self.observation_space.high[0:2])

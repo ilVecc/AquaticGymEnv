@@ -2,7 +2,7 @@ from collections import deque
 
 import numpy as np
 
-from dqn import DQNUtils
+from policies.dqn_policy import NetworkUtils
 
 
 class Buffer:
@@ -26,12 +26,14 @@ class Buffer:
 
 
 if __name__ == "__main__":
-    buf = Buffer(400)
-    with open("test_improve_5_linear2/checkpoint/scores.txt", "r") as log:
+    buf = Buffer(100000)
+    with open("test_new_3/checkpoint/scores.txt", "r") as log:
         score = log.readline()
         while score != '':
             score = float(score.strip())
             buf.add(score)
             score = log.readline()
     scores = np.array(list(buf.buffer))
-    DQNUtils.show_network_performance(scores)
+    NetworkUtils.show_network_performance(scores, folder="test_new_3")
+    NetworkUtils.show_overall_performance(scores, folder="test_new_3")
+    buf.clear()
