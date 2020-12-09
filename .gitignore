@@ -1,6 +1,6 @@
 .idea
-/testing/OLD/
 gym_aqua/__pycache__/
 gym_aqua/envs/__pycache__/
-testing/__pycache__/
-testing/policies/__pycache__/
+main/__pycache__/
+main/OLD/
+main/policies/__pycache__/

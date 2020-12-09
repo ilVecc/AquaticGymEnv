@@ -7,7 +7,6 @@ from keras import Sequential
 from keras.engine.saving import model_from_json
 from keras.layers import Dense
 from keras.optimizers import Adam
-from matplotlib import pyplot as plt
 
 from policies.basic_policy import Policy
 
@@ -50,70 +49,6 @@ class NetworkUtils:
         print("Loaded model from disk")
         return loaded_model
     
-    @staticmethod
-    def rolling(array, window):
-        shape = array.shape[:-1] + (array.shape[-1] - window, window)
-        strides = array.strides + (array.strides[-1],)
-        return np.mean(np.lib.stride_tricks.as_strided(array, shape=shape, strides=strides), -1)
-    
-    @staticmethod
-    def show_network_performance(scores, folder=None):
-        scores = np.array(scores)
-        offset = 200
-        episodes_offset = len(scores) - offset
-        scores = scores[-offset:]
-        
-        plt.figure(figsize=(14, 8))
-        
-        episodes = np.arange(1, len(scores) + 1) + episodes_offset
-        plt.plot(episodes, scores, label="score")
-        
-        scores_mean = np.full(scores.shape, np.mean(scores))
-        episodes_mean = np.arange(1, len(scores_mean) + 1) + episodes_offset
-        mean_plot = plt.plot(episodes_mean, scores_mean, label="mean")
-        
-        window_short = min(10, int(len(scores) * 0.25))
-        scores_short = NetworkUtils.rolling(scores, window=window_short)
-        episodes_short = episodes_mean[window_short:]
-        plt.plot(episodes_short, scores_short, label="smooth")
-        
-        window_long = min(10, int(len(scores_short) * 0.25))
-        scores_long = NetworkUtils.rolling(scores_short, window=window_long)
-        episodes_long = episodes_short[window_long:]
-        plt.plot(episodes_long, scores_long, label="very smooth")
-        
-        plt.yticks(list(plt.yticks()[0]) + [scores_mean[0]])
-        plt.gca().get_yticklabels()[-1].set_color(mean_plot[0].get_color())
-        plt.xlabel("Episodes")
-        plt.ylabel("Rewards")
-        plt.title("Reward per episode (last 200 episodes)")
-        plt.legend()
-        if folder is not None:
-            plt.savefig(os.path.join(folder, "../test_new_3/reward_episode_recent.png"))
-        plt.show()
-    
-    @staticmethod
-    def show_overall_performance(scores, folder=None):
-        scores = np.array(scores)
-        episodes = np.arange(1, len(scores) + 1)
-        
-        plt.figure(figsize=(14, 8))
-        
-        factor = 0.1
-        window_long = int(len(scores) * factor)
-        scores_long = NetworkUtils.rolling(scores, window=window_long)
-        episodes_long = episodes[window_long:]
-        plt.plot(episodes_long, scores_long,
-                 label="rolling window = {:2.0f}% episodes".format(factor * 100))
-        
-        plt.xlabel("Episodes")
-        plt.ylabel("Rewards")
-        plt.title("Overall Reward per episode")
-        plt.legend()
-        if folder is not None:
-            plt.savefig(os.path.join(folder, "../test_new_3/reward_episode_overall.png"))
-        plt.show()
-
 
 class ReplayBuffer:
     """
@@ -183,9 +118,8 @@ class AquaNormalizer(object):
 
 class DQNImpl:
     
-    def __init__(self, environment, discrete_actions, q_function, savedir):
+    def __init__(self, environment, q_function, savedir):
         self.env = environment
-        self.actions = discrete_actions
         self.q_function = q_function
         self.exp_buffer = ReplayBuffer(100000)
         self.checkpointdir = os.path.join(savedir, "checkpoint/")
@@ -204,7 +138,7 @@ class DQNImpl:
         Returns:
             action id
         """
-        n_actions = len(self.actions)
+        n_actions = self.q_function.input_shape[1]
         q_actions = self.q_function.predict(state)
         pred_action = np.argmax(q_actions)
         probs = np.full(n_actions, epsilon / n_actions)
@@ -231,7 +165,7 @@ class DQNImpl:
     
     def train(self, trials, threshold=90, epsilon_decay=0.999995, debug=False, render=False):
         """
-        Performs the Q-Learning algorithm for a specific environment on a specific neural network model
+        Performs Q-Learning algorithm for the given environment on this neural network model
 
         Args:
             threshold: the desired overall reward for an episode
@@ -265,7 +199,7 @@ class DQNImpl:
                 
                 # STEP
                 # go to next state with selected action
-                next_state, reward, done, info = self.env.step(self.actions[pred_action])
+                next_state, reward, done, info = self.env.step(pred_action)
                 next_state = self.state_normalizer(next_state)
                 # update reward here
                 episode_total_reward += reward
@@ -300,7 +234,8 @@ class DQNImpl:
             
             if debug:
                 term_string = Policy.termination_string(info, episode_total_reward, steps)
-                print("trial #{}: {}\n".format(epoch, term_string))
+                with np.printoptions(precision=2, suppress=True):
+                    print("trial #{}: {}  (state: {})\n".format(epoch, term_string, state[0, 0:3]))
             
             # end training
             if np.mean(score_queue[-20:]) > threshold:
@@ -315,14 +250,10 @@ class DQNImpl:
 
 class DQNPolicy(Policy):
     
-    def __init__(self, folder, env, thrusters_steps=2):
-        super().__init__()
-        self.env = env
+    def __init__(self, env, folder):
+        super().__init__(env)
         self.env.reset()
         self.state_normalizer = AquaNormalizer(self.env)
-
-        # action space is continuous, but we can't handle it -> use discrete tuple
-        self.actions = self._discretize_action_space(thrusters_steps)
         
         # check folder
         self.folder = folder
@@ -330,41 +261,31 @@ class DQNPolicy(Policy):
             os.mkdir(self.folder)
         
         # get the Q function (modeled as a neural network)
-        if len(os.listdir(self.folder)) != 0:
+        if 'model.h5' in os.listdir(self.folder):
             # ALREADY BUILT AND TRAINED
             self.neural_policy = NetworkUtils.load_network(self.folder)
             self.trained = True
         else:
             # NON EXISTING AND TO BE TRAINED
             # 5 input [x_boat, y_boat, angle_boat, x_goal, y_goal]
-            # 4 output (one per discretized action)
+            # 5 output (one per discrete action)
             input_size = self.env.observation_space.shape[0] + self.env.goal_state.shape[0]
-            output_size = len(self.actions)
+            output_size = 5
             self.neural_policy = NetworkUtils.create_model(input_size, 64, output_size)
             self.trained = False
-    
-    def _discretize_action_space(self, resolution):
-        action_space_discrete = np.linspace(self.env.action_space.low,
-                                            self.env.action_space.high,
-                                            num=resolution, endpoint=True)
-        return [(aL, aR)
-                for aL in action_space_discrete[:, 0]
-                for aR in action_space_discrete[:, 1]]
     
     def is_trained(self):
         return self.trained
     
     def train(self):
-        learner = DQNImpl(self.env, self.actions, self.neural_policy, self.folder)
-        neural_policy, episode_scores = learner.train(
+        learner = DQNImpl(self.env, self.neural_policy, self.folder)
+        neural_policy, episodes_score = learner.train(
             trials=1000000, threshold=90, debug=True, render=False)  # less than 100 steps
-        
         NetworkUtils.save_network(neural_policy, self.folder)
-        NetworkUtils.show_network_performance(episode_scores, self.folder)
-        NetworkUtils.show_overall_performance(episode_scores, self.folder)
+        return neural_policy, episodes_score
     
     def get_action(self, state):
         state = self.state_normalizer(state)
         actions_prob = self.neural_policy.predict(state)
-        pred_action = self.actions[actions_prob.argmax()]
+        pred_action = actions_prob.argmax()
         return pred_action

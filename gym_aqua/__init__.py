@@ -1,24 +1,67 @@
 from gym.envs.registration import register
 
-
+# SMALL
 register(
-    id='AquaSmall-v0',
-    entry_point='gym_aqua.envs:AquaSmallEnv',
+    id='AquaSmallEnv-v0',
+    entry_point='gym_aqua.envs:AquaSmall',
+    kwargs={'with_obstacles': False}
+)
+register(
+    id='AquaSmallEnv-v1',
+    entry_point='gym_aqua.envs:AquaSmall',
+    kwargs={'with_obstacles': True}
+)
+register(
+    id='AquaSmallContinuousEnv-v0',
+    entry_point='gym_aqua.envs:AquaSmallContinuous',
+    kwargs={'with_obstacles': False}
+)
+register(
+    id='AquaSmallContinuousEnv-v1',
+    entry_point='gym_aqua.envs:AquaSmallContinuous',
     kwargs={'with_obstacles': True}
 )
 
+# MEDIUM
 register(
-    id='AquaSmall-v1',
-    entry_point='gym_aqua.envs:AquaSmallEnv',
+    id='AquaMediumEnv-v0',
+    entry_point='gym_aqua.envs:AquaMedium',
     kwargs={'with_obstacles': False}
 )
-
 register(
-    id='AquaMedium-v0',
-    entry_point='gym_aqua.envs:AquaMediumEnv'
+    id='AquaMediumEnv-v1',
+    entry_point='gym_aqua.envs:AquaMedium',
+    kwargs={'with_obstacles': True}
+)
+register(
+    id='AquaMediumContinuousEnv-v0',
+    entry_point='gym_aqua.envs:AquaMediumContinuous',
+    kwargs={'with_obstacles': False}
+)
+register(
+    id='AquaMediumContinuousEnv-v1',
+    entry_point='gym_aqua.envs:AquaMediumContinuous',
+    kwargs={'with_obstacles': True}
 )
 
+# HUGE
 register(
-    id='AquaHuge-v0',
-    entry_point='gym_aqua.envs:AquaHugeEnv'
+    id='AquaHugeEnv-v0',
+    entry_point='gym_aqua.envs:AquaHuge',
+    kwargs={'with_obstacles': False}
+)
+register(
+    id='AquaHugeEnv-v1',
+    entry_point='gym_aqua.envs:AquaHuge',
+    kwargs={'with_obstacles': True}
+)
+register(
+    id='AquaHugeContinuousEnv-v0',
+    entry_point='gym_aqua.envs:AquaHugeContinuous',
+    kwargs={'with_obstacles': False}
+)
+register(
+    id='AquaHugeContinuousEnv-v1',
+    entry_point='gym_aqua.envs:AquaHugeContinuous',
+    kwargs={'with_obstacles': True}
 )

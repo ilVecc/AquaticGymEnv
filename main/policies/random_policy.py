@@ -16,5 +16,5 @@ class RandomPolicy(Policy):
     
     def get_action(self, state):
         # best_action = env.action_space.sample()
-        best_action = np.array([-0.3, 0.3])  # + np.array(np.random.randint(-5, 6, 2) / 200)
+        best_action = np.array([0.28, 0.3])  # + np.array(np.random.randint(-5, 6, 2) / 200)
         return best_action

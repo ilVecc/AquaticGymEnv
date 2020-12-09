@@ -3,20 +3,24 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 
 
-class AquaHugeEnv(gym.Env):
+class AquaHuge(gym.Env):
     metadata = {'render.modes': ['human']}
     
     def __init__(self):
-        ...
+        pass
     
     def step(self, action):
-        ...
+        pass
     
     def reset(self):
-        ...
+        pass
     
     def render(self, mode='human'):
-        ...
+        pass
     
     def close(self):
-        ...
+        pass
+
+
+class AquaHugeContinuous(AquaHuge):
+    continuous = True

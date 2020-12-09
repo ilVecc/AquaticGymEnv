@@ -5,7 +5,7 @@ import numpy as np
 from gym import spaces
 
 
-class AquaSmallEnv(gym.Env):
+class AquaSmall(gym.Env):
     """
     World size: [0, 100] x [0, 100] pix^2
     Motor speed:   [  -0.3,   +0.3] pix/s
@@ -13,10 +13,11 @@ class AquaSmallEnv(gym.Env):
     Waves speed variance:     0.001 pix/s
     """
     metadata = {'render.modes': ['human']}
+    continuous = False
     
     def __init__(self, with_obstacles):
         
-        # world constants
+        # WORLD CONSTANTS
         self.world_size = 100
         self.motor_min_thrust = -0.3
         self.motor_max_thrust = +0.3
@@ -24,18 +25,26 @@ class AquaSmallEnv(gym.Env):
         self.wave_max_speed = +0.05
         self.wave_speed_variance = 0.001
         
-        # env spaces
-        self.action_space = spaces.Box(self.motor_min_thrust,
-                                       self.motor_max_thrust,
-                                       shape=[2], dtype=np.float64)  # vL, vR
+        # ENV SPACES
+        if self.continuous:
+            # vL, vR
+            self.action_space = spaces.Box(self.motor_min_thrust,
+                                           self.motor_max_thrust,
+                                           shape=[2], dtype=np.float64)
+        else:
+            # no action, reverse, forward, rotate left, rotate right
+            self.action_space = spaces.Discrete(5)
+            
+        # x, y, angle
         self.observation_space = spaces.Box(np.array([0, 0, -np.pi]),
                                             np.array([self.world_size, self.world_size, np.pi]),
-                                            dtype=np.float64)  # x, y, angle
+                                            dtype=np.float64)
+        # vx, vy
         self.wave_space = spaces.Box(self.wave_min_speed,
                                      self.wave_max_speed,
-                                     shape=[2], dtype=np.float64)  # vx, vy
+                                     shape=[2], dtype=np.float64)
         
-        # obstacles and goal
+        # OBSTACLES AND GOAL SETUP
         if with_obstacles:
             self.obstacles = [
                 # x    y  type  radius/(width,heigth)
@@ -55,9 +64,6 @@ class AquaSmallEnv(gym.Env):
         self.goal_state = np.array([15, 65], dtype=np.float64)
         self.goal_radius = 2.5
         
-        # world dynamics
-        self.wave_speed = np.zeros(2, dtype=np.float64)
-        
         # internal state
         self.boat_radius = 2.5
         self.position = np.array([55, 30], dtype=np.float64)
@@ -66,6 +72,7 @@ class AquaSmallEnv(gym.Env):
         self.thrust_right = None
         self.thrust_total = None
         self.time = None
+        self.wave_speed = np.zeros(2, dtype=np.float64)
         
         # reward
         self.reward_goal = lambda: +100
@@ -79,6 +86,7 @@ class AquaSmallEnv(gym.Env):
         self.tau = 1  # time instant for numerical computation
         self.vectors_length_multiplier = 40
         self.axle_length = self.boat_radius  # absolute distance between the two motors
+        self.thrust_epsilon = 1e-8
         self.ICC = np.zeros(2, dtype=np.float64)
         self.viewer = None
     
@@ -99,59 +107,70 @@ class AquaSmallEnv(gym.Env):
         offset_value = value - range_start
         return (offset_value - (math.floor(offset_value / width) * width)) + range_start
     
-    def step(self, action: np.ndarray):
-        action = np.array(action, dtype=np.float64)
+    def step(self, action):
+        if isinstance(action, np.ndarray):
+            action = np.array(action, dtype=np.float64)
         err_msg = "%r (%s) invalid" % (action, type(action))
         assert self.action_space.contains(action), err_msg
         
+        ####
         # MOVE BOAT
-        # linear speed values of the Left and Right motor
-        self.thrust_left = action[0]
-        self.thrust_right = action[1]
-        
-        # direction
-        direction = np.array([np.cos(np.pi / 2 + self.angle), np.sin(np.pi / 2 + self.angle)])
-        
-        if self.thrust_left != self.thrust_right:
-            # ROTATION MOTION
-            # signed distance between (x,y) and ICC
-            R = self.axle_length / 2 * (self.thrust_right + self.thrust_left) / \
-                (self.thrust_right - self.thrust_left)
-            # angular speed
-            w = (self.thrust_right - self.thrust_left) / self.axle_length
-            # total tangential speed of the boat
-            self.thrust_total = w * R
-            
-            # Instantaneous Center of Curvature
-            # (point around which (x,y) rotates)
-            self.ICC = self.position + R * np.array(
-                [-np.sin(np.pi / 2 + self.angle), np.cos(np.pi / 2 + self.angle)])
-            
-            # differential drive direct kinematics
-            c, s = np.cos(w * self.tau), np.sin(w * self.tau)
-            rot = np.array([[c, -s], [s, c]])
-            self.position = rot.dot(self.position - self.ICC) + self.ICC
-            self.angle += w * self.tau
-            # basically angle <- angle - 2pi * floor((angle + pi) / 2pi)
-            self.angle = self.normalize_angle(self.angle,
-                                              self.observation_space.low[2],
-                                              self.observation_space.high[2])
+        ####
+        # get speed values of the Left and Right motor
+        if self.continuous:
+            self.thrust_left = action[0]
+            self.thrust_right = action[1]
         else:
-            # LINEAR MOTION
-            # self.angle remains the same
-            self.thrust_total = self.thrust_right + self.thrust_left
-            self.position += self.thrust_total * direction * self.tau
-            self.ICC = self.position
+            if action == 0:
+                self.thrust_left = 0
+                self.thrust_right = 0
+            elif action == 1:
+                self.thrust_left = self.motor_min_thrust
+                self.thrust_right = self.motor_min_thrust
+            elif action == 2:
+                self.thrust_left = self.motor_max_thrust
+                self.thrust_right = self.motor_max_thrust
+            elif action == 3:
+                self.thrust_left = self.motor_min_thrust
+                self.thrust_right = self.motor_max_thrust
+            elif action == 4:
+                self.thrust_left = self.motor_max_thrust
+                self.thrust_right = self.motor_min_thrust
+        thrust_diff = max(self.thrust_right - self.thrust_left, self.thrust_epsilon)
+        
+        # ROTATION MOTION (+ LINEAR handled using an epsilon sentinel)
+        # signed distance between (x,y) and ICC
+        R = self.axle_length / 2 * (self.thrust_right + self.thrust_left) / thrust_diff
+        # angular speed
+        w = thrust_diff / self.axle_length
+        # total tangential speed of the boat
+        self.thrust_total = w * R
+        
+        # Instantaneous Center of Curvature
+        # (point around which (x,y) rotates)
+        self.ICC = self.position + R * np.array(
+            [-np.sin(np.pi / 2 + self.angle), np.cos(np.pi / 2 + self.angle)])
+        
+        # differential drive direct kinematics
+        c, s = np.cos(w * self.tau), np.sin(w * self.tau)
+        rot = np.array([[c, -s], [s, c]])
+        self.position = rot.dot(self.position - self.ICC) + self.ICC
+        self.angle += w * self.tau
+        # basically angle <- angle - 2pi * floor((angle + pi) / 2pi)
+        self.angle = self.normalize_angle(self.angle,
+                                          self.observation_space.low[2],
+                                          self.observation_space.high[2])
         
         # add waves contribution
         self.position += self.wave_speed * self.tau
         
+        ####
         # UPDATE WAVES
-        diff = np.random.uniform(-self.wave_speed_variance, self.wave_speed_variance, 2)
-        new_wave_speed = self.wave_speed + diff
-        new_wave_speed[new_wave_speed > self.wave_max_speed] = self.wave_max_speed
-        new_wave_speed[new_wave_speed < self.wave_min_speed] = self.wave_min_speed
-        self.wave_speed = new_wave_speed
+        ####
+        thrust_diff = np.random.uniform(-self.wave_speed_variance, self.wave_speed_variance, 2)
+        self.wave_speed = np.clip(self.wave_speed + thrust_diff,
+                                  self.wave_min_speed,
+                                  self.wave_max_speed)
         
         # REWARD AND GOAL
         info = {
@@ -429,3 +448,7 @@ class AquaSmallEnv(gym.Env):
     def _has_collided_border(self):
         return np.any(self.position - self.boat_radius < self.observation_space.low[0:2]) \
                or np.any(self.position - self.boat_radius > self.observation_space.high[0:2])
+
+
+class AquaSmallContinuous(AquaSmall):
+    continuous = True
