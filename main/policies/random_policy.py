@@ -5,8 +5,8 @@ from policies.basic_policy import Policy
 
 class RandomPolicy(Policy):
     
-    def __init__(self):
-        super().__init__()
+    def __init__(self, env):
+        super().__init__(env)
 
     def is_trained(self):
         return True

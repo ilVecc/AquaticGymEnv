@@ -25,13 +25,12 @@ class Policy(object):
     def termination_string(info, episode_total_reward, steps):
         # identify ending-state
         if info['Termination.time']:
-            return "reached max steps [REW: {}]".format(episode_total_reward)
-        elif info['Termination.stuck']:
-            return "idling for too long [REW: {}]".format(episode_total_reward)
+            msg = "reached max steps                "
         elif info['Termination.collided']:
-            return "collided ({} steps) [REW: {}]".format(steps, episode_total_reward)
+            msg = "collided ({:3d} steps)             ".format(steps)
         else:
-            return " ---> REACHED GOAL ({} steps) [REW: {}]".format(steps, episode_total_reward)
+            msg = " >>> REACHED GOAL ({:3d} steps) <<<".format(steps)
+        return "{}  [REW: {:.2f}]".format(msg, episode_total_reward)
 
     def test(self):
         state = self.env.reset()

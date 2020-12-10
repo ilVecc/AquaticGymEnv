@@ -20,6 +20,6 @@ if __name__ == '__main__':
     with gym.make(setup['env_name']) as env:
         
         policy = DQNPolicy(env, setup['policy_savepath'])
-        # policy = RandomPolicy()
+        # policy = RandomPolicy(env)
         
         policy.test()

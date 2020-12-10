@@ -34,7 +34,7 @@ class AquaSmall(gym.Env):
         else:
             # no action, reverse, forward, rotate left, rotate right
             self.action_space = spaces.Discrete(5)
-            
+        
         # x, y, angle
         self.observation_space = spaces.Box(np.array([0, 0, -np.pi]),
                                             np.array([self.world_size, self.world_size, np.pi]),
@@ -91,14 +91,23 @@ class AquaSmall(gym.Env):
         self.viewer = None
     
     def reset(self):
-        self.position = np.array([55, 30], dtype=np.float64)
-        self.angle = 0.0
+        # set random state
+        # state = self.observation_space.sample()
+        state = np.array([65, 35, np.pi], dtype=np.float64)
+        self.position = state[0:2]
+        self.angle = state[2]
+        while self._has_collided_obstacle() \
+                or self._has_collided_border() \
+                or self._has_reached_goal():
+            state = self.observation_space.sample()
+            self.position = state[0:2]
+            self.angle = state[2]
+        # set velocities
         self.thrust_left = 0.0
         self.thrust_right = 0.0
         self.thrust_total = 0.0
         self.wave_speed = self.wave_space.sample()
         self.time = 0
-        state = np.array([self.position[0], self.position[1], self.angle])
         return state
     
     @staticmethod
@@ -107,35 +116,38 @@ class AquaSmall(gym.Env):
         offset_value = value - range_start
         return (offset_value - (math.floor(offset_value / width) * width)) + range_start
     
+    def _set_discrete_action(self, action):
+        if action == 0:
+            return self.motor_min_thrust, self.motor_min_thrust
+        elif action == 1:
+            return self.motor_min_thrust, self.motor_max_thrust
+        elif action == 2:
+            return self.motor_max_thrust, self.motor_min_thrust
+        elif action == 3:
+            return self.motor_max_thrust, self.motor_max_thrust
+        elif action == 4:
+            return self.motor_min_thrust, 0
+        elif action == 5:
+            return self.motor_max_thrust, 0
+        elif action == 6:
+            return 0, self.motor_min_thrust
+        elif action == 7:
+            return 0, self.motor_max_thrust
+    
     def step(self, action):
         if isinstance(action, np.ndarray):
             action = np.array(action, dtype=np.float64)
-        err_msg = "%r (%s) invalid" % (action, type(action))
-        assert self.action_space.contains(action), err_msg
+        assert self.action_space.contains(action), \
+            "input {0!r} provided, but type ({1!s}) is invalid".format(action, type(action))
         
         ####
         # MOVE BOAT
         ####
         # get speed values of the Left and Right motor
         if self.continuous:
-            self.thrust_left = action[0]
-            self.thrust_right = action[1]
+            self.thrust_left, self.thrust_right = action[0], action[1]
         else:
-            if action == 0:
-                self.thrust_left = 0
-                self.thrust_right = 0
-            elif action == 1:
-                self.thrust_left = self.motor_min_thrust
-                self.thrust_right = self.motor_min_thrust
-            elif action == 2:
-                self.thrust_left = self.motor_max_thrust
-                self.thrust_right = self.motor_max_thrust
-            elif action == 3:
-                self.thrust_left = self.motor_min_thrust
-                self.thrust_right = self.motor_max_thrust
-            elif action == 4:
-                self.thrust_left = self.motor_max_thrust
-                self.thrust_right = self.motor_min_thrust
+            self.thrust_left, self.thrust_right = self._set_discrete_action(action)
         thrust_diff = max(self.thrust_right - self.thrust_left, self.thrust_epsilon)
         
         # ROTATION MOTION (+ LINEAR handled using an epsilon sentinel)
@@ -431,16 +443,15 @@ class AquaSmall(gym.Env):
                                       self.position, self.boat_radius)
     
     def _has_collided_obstacle(self):
-        result = False
         for obs_x, obs_y, obs_type, obs_dim in self.obstacles:
             obs_pos = np.array([obs_x, obs_y])
             if obs_type == 'c':
                 dist = self._distance_circles(obs_pos, obs_dim, self.position, self.boat_radius)
-                result |= dist <= 0
             else:
                 dist = self._distance_rectangle(obs_pos, obs_dim, self.position, self.boat_radius)
-                result |= dist <= 0
-        return result
+            if dist <= 0:
+                return True
+        return False
     
     def _has_reached_goal(self):
         return self._distance_from_goal() <= 0

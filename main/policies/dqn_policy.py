@@ -2,6 +2,7 @@ import os
 import random
 from collections import deque
 
+import gym
 import numpy as np
 from keras import Sequential
 from keras.engine.saving import model_from_json
@@ -48,7 +49,7 @@ class NetworkUtils:
         loaded_model.compile(loss="mse", optimizer=Adam(learning_rate=0.0001))
         print("Loaded model from disk")
         return loaded_model
-    
+
 
 class ReplayBuffer:
     """
@@ -99,7 +100,7 @@ class ReplayBuffer:
         self.count = 0
 
 
-class AquaNormalizer(object):
+class StateNormalizer(object):
     
     def __init__(self, env):
         self.env = env
@@ -108,11 +109,17 @@ class AquaNormalizer(object):
         low_obs = np.concatenate((self.env.observation_space.low,
                                   self.env.observation_space.low[0:2]), axis=0)
         self.observation_range = high_obs - low_obs
-        
+    
     def __call__(self, state):
         state = np.concatenate((state, self.env.goal_state), axis=0)
         state /= self.observation_range  # set coordinates in [0,1] and angle in [-0.5,0.5]
         state[2] += 0.5  # set angle in [0,1]
+        return state[np.newaxis, :]
+    
+    def inverse(self, state):
+        state = state[0, 0:3]
+        state[2] -= 0.5
+        state *= self.observation_range[0:3]
         return state[np.newaxis, :]
 
 
@@ -125,8 +132,8 @@ class DQNImpl:
         self.checkpointdir = os.path.join(savedir, "checkpoint/")
         if not os.path.exists(self.checkpointdir):
             os.mkdir(self.checkpointdir)
-        self.state_normalizer = AquaNormalizer(self.env)
-        
+        self.state_normalizer = StateNormalizer(self.env)
+    
     def _epsilon_greedy_best_action(self, state, epsilon):
         """
         Epsilon-greedy action selection function
@@ -138,7 +145,7 @@ class DQNImpl:
         Returns:
             action id
         """
-        n_actions = self.q_function.input_shape[1]
+        n_actions = self.env.action_space.n
         q_actions = self.q_function.predict(state)
         pred_action = np.argmax(q_actions)
         probs = np.full(n_actions, epsilon / n_actions)
@@ -234,8 +241,9 @@ class DQNImpl:
             
             if debug:
                 term_string = Policy.termination_string(info, episode_total_reward, steps)
-                with np.printoptions(precision=2, suppress=True):
-                    print("trial #{}: {}  (state: {})\n".format(epoch, term_string, state[0, 0:3]))
+                state = self.state_normalizer.inverse(state)
+                print("trial #{}: {}  (x:{:2.1f} y:{:2.1f} a:{:3.1f}°)\n".format(
+                    epoch, term_string, state[0, 0], state[0, 1], state[0, 2] / np.pi * 180))
             
             # end training
             if np.mean(score_queue[-20:]) > threshold:
@@ -252,8 +260,12 @@ class DQNPolicy(Policy):
     
     def __init__(self, env, folder):
         super().__init__(env)
+        
+        assert isinstance(self.env.action_space, gym.spaces.Discrete), \
+            "DQN cannot be used on non-discrete action spaces!"
+        
         self.env.reset()
-        self.state_normalizer = AquaNormalizer(self.env)
+        self.state_normalizer = StateNormalizer(self.env)
         
         # check folder
         self.folder = folder
@@ -268,9 +280,9 @@ class DQNPolicy(Policy):
         else:
             # NON EXISTING AND TO BE TRAINED
             # 5 input [x_boat, y_boat, angle_boat, x_goal, y_goal]
-            # 5 output (one per discrete action)
+            # one output per discrete action
             input_size = self.env.observation_space.shape[0] + self.env.goal_state.shape[0]
-            output_size = 5
+            output_size = self.env.action_space.n
             self.neural_policy = NetworkUtils.create_model(input_size, 64, output_size)
             self.trained = False
     
@@ -279,8 +291,9 @@ class DQNPolicy(Policy):
     
     def train(self):
         learner = DQNImpl(self.env, self.neural_policy, self.folder)
+        # threshold => reward 90 (< 100 steps) in last 20 episodes
         neural_policy, episodes_score = learner.train(
-            trials=1000000, threshold=90, debug=True, render=False)  # less than 100 steps
+            trials=1000000, threshold=90, debug=True, render=False)
         NetworkUtils.save_network(neural_policy, self.folder)
         return neural_policy, episodes_score
     
