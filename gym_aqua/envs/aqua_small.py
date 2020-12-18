@@ -32,8 +32,25 @@ class AquaSmall(gym.Env):
                                            self.motor_max_thrust,
                                            shape=[2], dtype=np.float64)
         else:
-            # no action, reverse, forward, rotate left, rotate right
-            self.action_space = spaces.Discrete(5)
+            self.actions = [
+                # reverse
+                (self.motor_min_thrust, self.motor_min_thrust),
+                # rotate left
+                (self.motor_min_thrust, self.motor_max_thrust),
+                # rotate right
+                (self.motor_max_thrust, self.motor_min_thrust),
+                # full throttle
+                (self.motor_max_thrust, self.motor_max_thrust),
+                # # reverse left
+                # (self.motor_min_thrust, 0),
+                # # full throttle left
+                # (self.motor_max_thrust, 0),
+                # # reverse right
+                # (0, self.motor_min_thrust),
+                # # full throttle right
+                # (0, self.motor_max_thrust)
+            ]
+            self.action_space = spaces.Discrete(len(self.actions))
         
         # x, y, angle
         self.observation_space = spaces.Box(np.array([0, 0, -np.pi]),
@@ -92,8 +109,7 @@ class AquaSmall(gym.Env):
     
     def reset(self):
         # set random state
-        # state = self.observation_space.sample()
-        state = np.array([65, 35, np.pi], dtype=np.float64)
+        state = self.observation_space.sample()
         self.position = state[0:2]
         self.angle = state[2]
         while self._has_collided_obstacle() \
@@ -110,29 +126,11 @@ class AquaSmall(gym.Env):
         self.time = 0
         return state
     
-    @staticmethod
-    def normalize_angle(value, range_start, range_end):
+    def normalize_angle(self, value):
+        range_start, range_end = self.observation_space.low[2], self.observation_space.high[2]
         width = range_end - range_start
         offset_value = value - range_start
         return (offset_value - (math.floor(offset_value / width) * width)) + range_start
-    
-    def _set_discrete_action(self, action):
-        if action == 0:
-            return self.motor_min_thrust, self.motor_min_thrust
-        elif action == 1:
-            return self.motor_min_thrust, self.motor_max_thrust
-        elif action == 2:
-            return self.motor_max_thrust, self.motor_min_thrust
-        elif action == 3:
-            return self.motor_max_thrust, self.motor_max_thrust
-        elif action == 4:
-            return self.motor_min_thrust, 0
-        elif action == 5:
-            return self.motor_max_thrust, 0
-        elif action == 6:
-            return 0, self.motor_min_thrust
-        elif action == 7:
-            return 0, self.motor_max_thrust
     
     def step(self, action):
         if isinstance(action, np.ndarray):
@@ -147,13 +145,18 @@ class AquaSmall(gym.Env):
         if self.continuous:
             self.thrust_left, self.thrust_right = action[0], action[1]
         else:
-            self.thrust_left, self.thrust_right = self._set_discrete_action(action)
-        thrust_diff = max(self.thrust_right - self.thrust_left, self.thrust_epsilon)
+            # noinspection PyTypeChecker
+            self.thrust_left, self.thrust_right = self.actions[action]
+        
+        # set a minimum epsilon to avoid the linear situation and treat it as angular
+        # keep the same sign thou, since it's important for the rotation
+        thrust_diff = self.thrust_right - self.thrust_left
+        thrust_diff = math.copysign(max(abs(thrust_diff), self.thrust_epsilon), thrust_diff)
         
         # ROTATION MOTION (+ LINEAR handled using an epsilon sentinel)
-        # signed distance between (x,y) and ICC
+        # signed distance between (x,y) and ICC [pix]
         R = self.axle_length / 2 * (self.thrust_right + self.thrust_left) / thrust_diff
-        # angular speed
+        # angular speed [rad/s]
         w = thrust_diff / self.axle_length
         # total tangential speed of the boat
         self.thrust_total = w * R
@@ -169,9 +172,7 @@ class AquaSmall(gym.Env):
         self.position = rot.dot(self.position - self.ICC) + self.ICC
         self.angle += w * self.tau
         # basically angle <- angle - 2pi * floor((angle + pi) / 2pi)
-        self.angle = self.normalize_angle(self.angle,
-                                          self.observation_space.low[2],
-                                          self.observation_space.high[2])
+        self.angle = self.normalize_angle(self.angle)
         
         # add waves contribution
         self.position += self.wave_speed * self.tau
@@ -179,8 +180,8 @@ class AquaSmall(gym.Env):
         ####
         # UPDATE WAVES
         ####
-        thrust_diff = np.random.uniform(-self.wave_speed_variance, self.wave_speed_variance, 2)
-        self.wave_speed = np.clip(self.wave_speed + thrust_diff,
+        wave_speed_diff = np.random.uniform(-self.wave_speed_variance, self.wave_speed_variance, 2)
+        self.wave_speed = np.clip(self.wave_speed + wave_speed_diff,
                                   self.wave_min_speed,
                                   self.wave_max_speed)
         
@@ -442,6 +443,17 @@ class AquaSmall(gym.Env):
         return self._distance_circles(self.goal_state, self.goal_radius,
                                       self.position, self.boat_radius)
     
+    def _distance_from_nearest_obstacle(self):
+        min_dist = +math.inf
+        for obs_x, obs_y, obs_type, obs_dim in self.obstacles:
+            obs_pos = np.array([obs_x, obs_y])
+            if obs_type == 'c':
+                dist = self._distance_circles(obs_pos, obs_dim, self.position, self.boat_radius)
+            else:
+                dist = self._distance_rectangle(obs_pos, obs_dim, self.position, self.boat_radius)
+            min_dist = min(dist, min_dist)
+        return min_dist
+    
     def _has_collided_obstacle(self):
         for obs_x, obs_y, obs_type, obs_dim in self.obstacles:
             obs_pos = np.array([obs_x, obs_y])
@@ -458,7 +470,7 @@ class AquaSmall(gym.Env):
     
     def _has_collided_border(self):
         return np.any(self.position - self.boat_radius < self.observation_space.low[0:2]) \
-               or np.any(self.position - self.boat_radius > self.observation_space.high[0:2])
+               or np.any(self.position + self.boat_radius > self.observation_space.high[0:2])
 
 
 class AquaSmallContinuous(AquaSmall):

@@ -154,13 +154,13 @@ class DQNImpl:
         return pred_action, q_actions[0, pred_action]
     
     def _improve(self, gamma=0.95):
-        batch_size = 256
-        prediction_batch_size = int(batch_size / 4)
+        batch_size = 1024
         b_state, b_action, b_next_state, b_reward, b_done = self.exp_buffer.sample(batch_size)
         
         # probability vector of the actions
-        targets = self.q_function.predict(b_state[:], batch_size=prediction_batch_size)
-        targets[np.arange(targets.shape[0]), b_action[:]] = b_reward
+        prediction_batch_size = int(batch_size / 4)
+        targets = self.q_function.predict(b_state, batch_size=prediction_batch_size)
+        targets[np.arange(targets.shape[0]), b_action] = b_reward
         # must consider next state if not terminal
         b_not_done = np.logical_not(b_done)
         future_quality = self.q_function.predict(b_next_state[b_not_done],
@@ -170,7 +170,7 @@ class DQNImpl:
         # back-propagation
         return self.q_function.train_on_batch(b_state, targets)
     
-    def train(self, trials, threshold=90, epsilon_decay=0.999995, debug=False, render=False):
+    def train(self, trials, threshold=90, epsilon_decay=0.995, debug=False, render=False):
         """
         Performs Q-Learning algorithm for the given environment on this neural network model
 
@@ -202,7 +202,9 @@ class DQNImpl:
             while not done:
                 # epsilon greedy implementation (improves exploration)
                 pred_action, pred_q_value = self._epsilon_greedy_best_action(state, epsilon)
-                epsilon = max(epsilon * epsilon_decay, epsilon_min)  # stable on 0.01 at trial 92101
+                epsilon = max(epsilon * epsilon_decay, epsilon_min)
+
+                # epsilon reaches min at step 918, but maximum of env is 1000 so we're fine
                 
                 # STEP
                 # go to next state with selected action
@@ -289,11 +291,11 @@ class DQNPolicy(Policy):
     def is_trained(self):
         return self.trained
     
-    def train(self):
+    def train(self, debug, render):
         learner = DQNImpl(self.env, self.neural_policy, self.folder)
         # threshold => reward 90 (< 100 steps) in last 20 episodes
         neural_policy, episodes_score = learner.train(
-            trials=1000000, threshold=90, debug=True, render=False)
+            trials=1000000, threshold=90, debug=debug, render=render)
         NetworkUtils.save_network(neural_policy, self.folder)
         return neural_policy, episodes_score
     

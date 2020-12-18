@@ -8,7 +8,7 @@ class Policy(object):
     def is_trained(self):
         pass
 
-    def train(self):
+    def train(self, debug, render):
         pass
 
     def get_action(self, state):
@@ -30,7 +30,7 @@ class Policy(object):
             msg = "collided ({:3d} steps)             ".format(steps)
         else:
             msg = " >>> REACHED GOAL ({:3d} steps) <<<".format(steps)
-        return "{}  [REW: {:.2f}]".format(msg, episode_total_reward)
+        return "{}  [REW: {:3.2f}]".format(msg, episode_total_reward)
 
     def test(self):
         state = self.env.reset()
