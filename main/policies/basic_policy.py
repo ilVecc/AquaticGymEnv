@@ -1,12 +1,24 @@
+import gym
 
 
-class Policy(object):
+class AquaPolicy(object):
     
-    def __init__(self, env):
-        self.env = env
-
-    def is_trained(self):
-        pass
+    def __init__(self, env_size, is_discrete, with_obstacles, with_waves):
+        kwargs = {
+            'with_obstacles': with_obstacles,
+            'with_waves': with_waves
+        }
+        if env_size == 'huge':
+            env_size = 'v2'
+        elif env_size == 'medium':
+            env_size = 'v1'
+        else:
+            env_size = 'v0'
+            
+        if is_discrete:
+            self.env = gym.make("AquaEnv-{}".format(env_size), **kwargs)
+        else:
+            self.env = gym.make("AquaContinuousEnv-{}".format(env_size), **kwargs)
 
     def train(self, debug, render):
         pass
@@ -30,13 +42,13 @@ class Policy(object):
             msg = "collided ({:3d} steps)             ".format(steps)
         else:
             msg = " >>> REACHED GOAL ({:3d} steps) <<<".format(steps)
-        return "{}  [REW: {:3.2f}]".format(msg, episode_total_reward)
+        return "{}  [REW: {:5.2f}]".format(msg, episode_total_reward)
 
     def test(self):
         state = self.env.reset()
         episode_total_reward = 0
         self.env.render()
-        for i in Policy.zero_to_infinity():
+        for i in AquaPolicy.zero_to_infinity():
             # choose action
             pred_action = self.get_action(state)
             # apply action
@@ -45,6 +57,6 @@ class Policy(object):
             self.env.render()
         
             if done:
-                term_string = Policy.termination_string(info, episode_total_reward, i)
+                term_string = AquaPolicy.termination_string(info, episode_total_reward, i)
                 print("{}".format(term_string))
                 break

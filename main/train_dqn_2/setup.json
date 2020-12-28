@@ -1,4 +1,0 @@
-{
-	"env_name": "AquaSmallEnv-v0",
-	"policy_savepath": "train_dqn_2"
-}

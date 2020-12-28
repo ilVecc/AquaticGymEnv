@@ -15,21 +15,22 @@ class AquaSmall(gym.Env):
     metadata = {'render.modes': ['human']}
     continuous = False
     
-    def __init__(self, with_obstacles):
+    def __init__(self, with_obstacles, with_waves=True):
+        
+        with_waves = int(with_waves)
         
         # WORLD CONSTANTS
         self.world_size = 100
         self.motor_min_thrust = -0.3
         self.motor_max_thrust = +0.3
-        self.wave_min_speed = -0.05
-        self.wave_max_speed = +0.05
-        self.wave_speed_variance = 0.001
+        self.wave_min_speed = -0.05 * with_waves
+        self.wave_max_speed = +0.05 * with_waves
+        self.wave_speed_variance = 0.001 * with_waves
         
         # ENV SPACES
         if self.continuous:
             # vL, vR
-            self.action_space = spaces.Box(self.motor_min_thrust,
-                                           self.motor_max_thrust,
+            self.action_space = spaces.Box(self.motor_min_thrust, self.motor_max_thrust,
                                            shape=[2], dtype=np.float64)
         else:
             self.actions = [
@@ -57,8 +58,7 @@ class AquaSmall(gym.Env):
                                             np.array([self.world_size, self.world_size, np.pi]),
                                             dtype=np.float64)
         # vx, vy
-        self.wave_space = spaces.Box(self.wave_min_speed,
-                                     self.wave_max_speed,
+        self.wave_space = spaces.Box(self.wave_min_speed, self.wave_max_speed,
                                      shape=[2], dtype=np.float64)
         
         # OBSTACLES AND GOAL SETUP
@@ -83,8 +83,7 @@ class AquaSmall(gym.Env):
         
         # internal state
         self.boat_radius = 2.5
-        self.position = np.array([55, 30], dtype=np.float64)
-        self.angle = None
+        self.state = np.array([55, 30, None], dtype=np.float64)
         self.thrust_left = None
         self.thrust_right = None
         self.thrust_total = None
@@ -96,10 +95,10 @@ class AquaSmall(gym.Env):
         self.reward_max_steps = lambda: -100
         self.reward_collision = lambda: -100
         self.reward_step = lambda: -0.1
-        self.time_limit = 1000
+        self.time_limit = 750
         
         # rendering
-        self.scale = 5.0
+        self.view_scale = 5.0
         self.tau = 1  # time instant for numerical computation
         self.vectors_length_multiplier = 40
         self.axle_length = self.boat_radius  # absolute distance between the two motors
@@ -109,22 +108,16 @@ class AquaSmall(gym.Env):
     
     def reset(self):
         # set random state
-        state = self.observation_space.sample()
-        self.position = state[0:2]
-        self.angle = state[2]
-        while self._has_collided_obstacle() \
-                or self._has_collided_border() \
-                or self._has_reached_goal():
-            state = self.observation_space.sample()
-            self.position = state[0:2]
-            self.angle = state[2]
+        self.state = self.observation_space.sample()
+        while self._has_collided_obstacle() or self._has_collided_border() or self._has_reached_goal():
+            self.state = self.observation_space.sample()
         # set velocities
         self.thrust_left = 0.0
         self.thrust_right = 0.0
         self.thrust_total = 0.0
         self.wave_speed = self.wave_space.sample()
         self.time = 0
-        return state
+        return self.state
     
     def normalize_angle(self, value):
         range_start, range_end = self.observation_space.low[2], self.observation_space.high[2]
@@ -161,21 +154,24 @@ class AquaSmall(gym.Env):
         # total tangential speed of the boat
         self.thrust_total = w * R
         
-        # Instantaneous Center of Curvature
-        # (point around which (x,y) rotates)
-        self.ICC = self.position + R * np.array(
-            [-np.sin(np.pi / 2 + self.angle), np.cos(np.pi / 2 + self.angle)])
+        position = self.state[0:2]
+        angle = self.state[2]
         
+        # Instantaneous Center of Curvature (point around which (x,y) rotates)
+        self.ICC = position + R * np.array([-np.sin(np.pi / 2 + angle),
+                                            np.cos(np.pi / 2 + angle)])
         # differential drive direct kinematics
         c, s = np.cos(w * self.tau), np.sin(w * self.tau)
-        rot = np.array([[c, -s], [s, c]])
-        self.position = rot.dot(self.position - self.ICC) + self.ICC
-        self.angle += w * self.tau
-        # basically angle <- angle - 2pi * floor((angle + pi) / 2pi)
-        self.angle = self.normalize_angle(self.angle)
+        rot = np.array([[c, -s],
+                        [s,  c]])
         
+        self.state[0:2] = rot.dot(position - self.ICC) + self.ICC
         # add waves contribution
-        self.position += self.wave_speed * self.tau
+        self.state[0:2] += self.wave_speed * self.tau
+        
+        self.state[2] += w * self.tau
+        # basically angle <- angle - 2pi * floor((angle + pi) / 2pi)
+        self.state[2] = self.normalize_angle(self.state[2])
         
         ####
         # UPDATE WAVES
@@ -212,7 +208,7 @@ class AquaSmall(gym.Env):
         
         self.time += 1
         
-        return np.array([self.position[0], self.position[1], self.angle]), reward, done, info
+        return self.state, reward, done, info
     
     def render(self, mode='human'):
         
@@ -226,20 +222,20 @@ class AquaSmall(gym.Env):
         wave_color = (.0, .5, .65)
         
         # scaling of the scene
-        world_size = int(self.world_size * self.scale)
-        position = self.position * self.scale
-        boat_radius = self.boat_radius * self.scale
-        axle_width = self.axle_length * self.scale
-        thrust_left = self.thrust_left * self.scale
-        thrust_right = self.thrust_right * self.scale
-        icc = self.ICC * self.scale
-        wave_speed = self.wave_speed * self.scale
+        world_size = int(self.world_size * self.view_scale)
+        position = self.state[0:2] * self.view_scale
+        boat_radius = self.boat_radius * self.view_scale
+        axle_width = self.axle_length * self.view_scale
+        thrust_left = self.thrust_left * self.view_scale
+        thrust_right = self.thrust_right * self.view_scale
+        icc = self.ICC * self.view_scale
+        wave_speed = self.wave_speed * self.view_scale
         
         # standard sizes in the scene
         vec_width = boat_radius / 2
         thrust_left_length = self.vectors_length_multiplier * abs(thrust_left)
         thrust_right_length = self.vectors_length_multiplier * abs(thrust_right)
-        wave_width = self.scale
+        wave_width = self.view_scale
         wave_length = self.vectors_length_multiplier * np.linalg.norm(wave_speed)
         
         if self.viewer is None:
@@ -294,13 +290,13 @@ class AquaSmall(gym.Env):
             
             # DRAW OBSTACLES
             for obs_x, obs_y, obs_type, obs_dim in self.obstacles:
-                obs_x *= self.scale
-                obs_y *= self.scale
+                obs_x *= self.view_scale
+                obs_y *= self.view_scale
                 if obs_type == 'c':
-                    view_obs = rendering.make_circle(obs_dim * self.scale)
+                    view_obs = rendering.make_circle(obs_dim * self.view_scale)
                 # elif obs_type == 'r':
                 else:
-                    obs_dim = (obs_dim[0] * self.scale, obs_dim[1] * self.scale)
+                    obs_dim = (obs_dim[0] * self.view_scale, obs_dim[1] * self.view_scale)
                     l, r, t, b = -obs_dim[0] / 2, obs_dim[0] / 2, obs_dim[1] / 2, -obs_dim[1] / 2
                     view_obs = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
                 view_obs.set_color(*obstacle_color)
@@ -308,8 +304,8 @@ class AquaSmall(gym.Env):
                 self.viewer.add_geom(view_obs)
             
             # DRAW GOAL
-            goal = self.goal_state * self.scale
-            goal_radius = self.goal_radius * self.scale
+            goal = self.goal_state * self.view_scale
+            goal_radius = self.goal_radius * self.view_scale
             view_goal = rendering.make_circle(goal_radius)
             view_goal.set_color(*goal_color)
             view_goal.add_attr(rendering.Transform(translation=(goal[0], goal[1])))
@@ -339,7 +335,7 @@ class AquaSmall(gym.Env):
             self._view_wave_arrow = view_wave_arrow
         
         # env not reset
-        if self.position is None:
+        if self.state[0:2] is None:
             return None
         
         #
@@ -360,11 +356,11 @@ class AquaSmall(gym.Env):
             thrust_left_length *= -1
         
         thrust_left_offset = (
-            thrust_left_length / 2 * np.cos(np.pi / 2 + self.angle),
-            thrust_left_length / 2 * np.sin(np.pi / 2 + self.angle),
+            thrust_left_length / 2 * np.cos(np.pi / 2 + self.state[2]),
+            thrust_left_length / 2 * np.sin(np.pi / 2 + self.state[2]),
         )
         self.thrust_left_trans.set_translation(*thrust_left_offset)
-        self.thrust_left_trans.set_rotation(self.angle)
+        self.thrust_left_trans.set_rotation(self.state[2])
         
         # thrust right magnitude and movement
         l, r, t, b = -vec_width / 2 + axle_width / 2, vec_width / 2 + axle_width / 2, \
@@ -378,19 +374,19 @@ class AquaSmall(gym.Env):
             thrust_right_length *= -1
         
         thrust_right_offset = (
-            thrust_right_length / 2 * np.cos(np.pi / 2 + self.angle),
-            thrust_right_length / 2 * np.sin(np.pi / 2 + self.angle),
+            thrust_right_length / 2 * np.cos(np.pi / 2 + self.state[2]),
+            thrust_right_length / 2 * np.sin(np.pi / 2 + self.state[2]),
         )
         self.thrust_right_trans.set_translation(*thrust_right_offset)
-        self.thrust_right_trans.set_rotation(self.angle)
+        self.thrust_right_trans.set_rotation(self.state[2])
         
         # direction movement
         direction_offset = (
-            boat_radius / 2 * np.cos(np.pi / 2 + self.angle),
-            boat_radius / 2 * np.sin(np.pi / 2 + self.angle),
+            boat_radius / 2 * np.cos(np.pi / 2 + self.state[2]),
+            boat_radius / 2 * np.sin(np.pi / 2 + self.state[2]),
         )
         self.direction_trans.set_translation(*direction_offset)
-        self.direction_trans.set_rotation(self.angle)
+        self.direction_trans.set_rotation(self.state[2])
         
         # ICC movement
         self.icc_trans.set_translation(icc[0], icc[1])
@@ -441,16 +437,16 @@ class AquaSmall(gym.Env):
     
     def _distance_from_goal(self):
         return self._distance_circles(self.goal_state, self.goal_radius,
-                                      self.position, self.boat_radius)
+                                      self.state[0:2], self.boat_radius)
     
     def _distance_from_nearest_obstacle(self):
         min_dist = +math.inf
         for obs_x, obs_y, obs_type, obs_dim in self.obstacles:
             obs_pos = np.array([obs_x, obs_y])
             if obs_type == 'c':
-                dist = self._distance_circles(obs_pos, obs_dim, self.position, self.boat_radius)
+                dist = self._distance_circles(obs_pos, obs_dim, self.state[0:2], self.boat_radius)
             else:
-                dist = self._distance_rectangle(obs_pos, obs_dim, self.position, self.boat_radius)
+                dist = self._distance_rectangle(obs_pos, obs_dim, self.state[0:2], self.boat_radius)
             min_dist = min(dist, min_dist)
         return min_dist
     
@@ -458,9 +454,9 @@ class AquaSmall(gym.Env):
         for obs_x, obs_y, obs_type, obs_dim in self.obstacles:
             obs_pos = np.array([obs_x, obs_y])
             if obs_type == 'c':
-                dist = self._distance_circles(obs_pos, obs_dim, self.position, self.boat_radius)
+                dist = self._distance_circles(obs_pos, obs_dim, self.state[0:2], self.boat_radius)
             else:
-                dist = self._distance_rectangle(obs_pos, obs_dim, self.position, self.boat_radius)
+                dist = self._distance_rectangle(obs_pos, obs_dim, self.state[0:2], self.boat_radius)
             if dist <= 0:
                 return True
         return False
@@ -469,8 +465,8 @@ class AquaSmall(gym.Env):
         return self._distance_from_goal() <= 0
     
     def _has_collided_border(self):
-        return np.any(self.position - self.boat_radius < self.observation_space.low[0:2]) \
-               or np.any(self.position + self.boat_radius > self.observation_space.high[0:2])
+        return np.any(self.state[0:2] - self.boat_radius < self.observation_space.low[0:2]) \
+               or np.any(self.state[0:2] + self.boat_radius > self.observation_space.high[0:2])
 
 
 class AquaSmallContinuous(AquaSmall):
