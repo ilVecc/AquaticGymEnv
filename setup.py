@@ -1,8 +1,8 @@
 from setuptools import setup
 
-# file needed when creating a Python package
+# run this file to create the Python package of the environment
 
 setup(name='gym_aqua',
-      version='0.0.1',
-      install_requires=['gym', 'numpy']  # TODO don't forget dependencies
+      version='1.0.0',
+      install_requires=['gym', 'numpy', 'matplotlib', 'tensorflow']
       )

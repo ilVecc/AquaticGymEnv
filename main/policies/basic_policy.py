@@ -3,28 +3,15 @@ import gym
 
 class AquaPolicy(object):
     
-    def __init__(self, env_size, is_discrete, with_obstacles, with_waves):
-        kwargs = {
-            'with_obstacles': with_obstacles,
-            'with_waves': with_waves
-        }
-        if env_size == 'huge':
-            env_size = 'v2'
-        elif env_size == 'medium':
-            env_size = 'v1'
-        else:
-            env_size = 'v0'
-            
-        if is_discrete:
-            self.env = gym.make("AquaEnv-{}".format(env_size), **kwargs)
-        else:
-            self.env = gym.make("AquaContinuousEnv-{}".format(env_size), **kwargs)
+    def __init__(self, is_discrete, params):
+        env_name = "AquaEnv-v0" if is_discrete else "AquaContinuousEnv-v0"
+        self.env = gym.make(env_name, **params)
 
     def train(self, debug, render):
-        pass
+        raise NotImplementedError("no training strategy has been implemented")
 
     def get_action(self, state):
-        pass
+        raise NotImplementedError("no action selection strategy has been implemented")
 
     @staticmethod
     def zero_to_infinity():
@@ -34,15 +21,15 @@ class AquaPolicy(object):
             yield time
 
     @staticmethod
-    def termination_string(info, episode_total_reward, steps):
+    def term_string(info, episode_total_reward, steps):
         # identify ending-state
         if info['Termination.time']:
             msg = "reached max steps                "
         elif info['Termination.collided']:
             msg = "collided ({:3d} steps)             ".format(steps)
         else:
-            msg = " >>> REACHED GOAL ({:3d} steps) <<<".format(steps)
-        return "{}  [REW: {:5.2f}]".format(msg, episode_total_reward)
+            msg = ">>> REACHED GOAL ({: 3d} steps) <<<".format(steps)
+        return "{}  [REW: {: 7.2f}]".format(msg, episode_total_reward)
 
     def test(self):
         state = self.env.reset()
@@ -57,6 +44,6 @@ class AquaPolicy(object):
             self.env.render()
         
             if done:
-                term_string = AquaPolicy.termination_string(info, episode_total_reward, i)
+                term_string = AquaPolicy.term_string(info, episode_total_reward, i)
                 print("{}".format(term_string))
                 break
