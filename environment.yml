@@ -1,12 +1,13 @@
 name: aquagym
 channels:
-- anaconda
-- conda-forge
+  - anaconda
+  - conda-forge
 dependencies:
-- python=3.8
-- gym
-- numpy
-- matplotlib
-- tensorflow-gpu=2.3
-- cudatoolkit=10.1
-- cudnn=7.6.5
+  - python=3.8
+  - gym
+  - numpy
+  - matplotlib
+  - seaborn
+  - tensorflow-gpu=2.3
+  - cudatoolkit=10.1
+  - cudnn=7.6.5

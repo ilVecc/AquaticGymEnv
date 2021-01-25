@@ -1,9 +1,8 @@
-.idea
-gym_aqua/__pycache__/
-gym_aqua/envs/__pycache__/
-main/__pycache__/
-main/OLD/
-main/policies/__pycache__/
-main/comparison_success.png
-main/desired_plot.png
-dqn_*
+/.idea
+/gym_aqua/__pycache__/
+/gym_aqua/envs/__pycache__/
+/main/__pycache__/
+/main/dqn_no_obs/
+/main/dqn_with_obs/
+/main/dqn_hard_obs/
+/main/plots/
