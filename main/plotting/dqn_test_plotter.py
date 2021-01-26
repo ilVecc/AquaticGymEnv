@@ -38,21 +38,22 @@ class TestPlotter(object):
         plt.subplots(1, figsize=(10, 10))
         plt.xticks(fontsize=16)
         plt.yticks(fontsize=16)
+        
+        sns.boxplot(x="Environment", y="Reward", data=self.results)
+        sns.swarmplot(x="Environment", y="Reward", data=self.results.groupby("Environment").sample(min(self.n_tests, 200)))
+        
         plt.xlabel("Environment", fontsize=16)
         plt.ylabel("Reward", fontsize=16)
         plt.title(f"Aqua test rewards ({self.n_tests} runs)", fontsize=24)
-        
-        sns.boxplot(x="Environment", y="Reward", data=self.results)
-        sns.swarmplot(x="Environment", y="Reward", data=self.results.groupby("Environment").sample(min(self.n_tests, 100)))
         if save:
             plt.savefig(str(Path("plots") / "test_overall_rewards.png"))
         plt.show()
         
         plt.subplots(1, figsize=(10, 10))
+        ax = sns.countplot(data=self.results[self.results["Success"] > 0], x="Environment")
         plt.xlabel("Environment", fontsize=16)
         plt.ylabel("Success", fontsize=16)
         plt.title(f"Aqua test success ({self.n_tests} runs)", fontsize=24)
-        ax = sns.countplot(data=self.results[self.results["Success"] > 0], x="Environment")
         # add percentage on top of the bars
         for p in ax.patches:
             height = p.get_height()
