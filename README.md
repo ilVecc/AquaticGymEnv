@@ -28,5 +28,5 @@ to see the overall rewards/success during the process. After the training, use `
 of the q-value in the various states is available with `dqn_qvalue_plotter.py`.
 
 With the provided setup, we can obtain results similar to those shown in the plots below.
-![Overall training rewards](imgs/ex_training_overall_rewards.png "Overall training rewards")
-![Overall training rewards](imgs/ex_training_overall_success.png "Overall training rewards")
+![Overall training rewards](ex_training_overall_rewards.png "Overall training rewards")
+![Overall training rewards](ex_training_overall_success.png "Overall training rewards")

@@ -1,8 +1,8 @@
-/.idea
-/gym_aqua/__pycache__/
-/gym_aqua/envs/__pycache__/
-/main/__pycache__/
-/main/dqn_no_obs/
-/main/dqn_with_obs/
-/main/dqn_hard_obs/
-/main/plots/
+.idea
+gym_aqua/__pycache__
+gym_aqua/envs/__pycache__
+main/__pycache__
+dqn_no_obs
+dqn_with_obs
+dqn_hard_obs
+plots
