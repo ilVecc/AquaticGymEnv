@@ -1,8 +1,8 @@
 import gym
 import numpy as np
 
-from tests import Policy
 from impl.utils import aqua_term_string
+from testing import Policy
 
 
 class OptimalAquaPolicy(Policy):
@@ -29,7 +29,6 @@ class OptimalAquaPolicy(Policy):
 
 
 if __name__ == '__main__':
-    
     # the optimal policy is meant to be used only on discrete, non-obstacles setups
     
     env = gym.make("AquaEnv-v0", obstacles=False)

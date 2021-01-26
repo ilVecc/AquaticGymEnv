@@ -11,7 +11,7 @@ from utils import AquaStateNormalizer
 if __name__ == '__main__':
     # we already registered the environments in gym_aqua/__init__.py so now we're ready to go
     
-    policy_savepath = 'dqn_with_obs/policy_1'
+    policy_savepath = 'dqn_with_obs/new_policy'  # ! change this path
     
     os.makedirs(policy_savepath, exist_ok=True)
     

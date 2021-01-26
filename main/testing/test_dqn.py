@@ -1,6 +1,6 @@
 import os
 
-from tests import Policy
+from testing import Policy
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
@@ -26,6 +26,6 @@ if __name__ == '__main__':
     # we already registered the environments in gym_aqua/__init__.py so now we're ready to go
     
     env = gym.make("AquaEnv-v0", obstacles=True)
-    policy = DQNAquaPolicy(savepath='dqn_with_obs/policy_1/model/model-00000', normalizer=AquaStateNormalizer(env))
+    policy = DQNAquaPolicy(savepath='example_policies/example_no_obs/models/model-00030', normalizer=AquaStateNormalizer(env))
     tot_rew, info, tot_steps = policy.test(env)
     print(aqua_term_string(info, tot_rew, tot_steps))

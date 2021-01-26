@@ -1,4 +1,4 @@
-from dqn import Normalizer
+from impl.dqn import Normalizer
 
 
 def aqua_term_string(info, episode_total_reward, steps):

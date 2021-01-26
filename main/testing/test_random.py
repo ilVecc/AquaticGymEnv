@@ -1,7 +1,7 @@
 import gym
 
-from tests import Policy
 from impl.utils import aqua_term_string
+from testing import Policy
 
 
 class RandomAquaPolicy(Policy):

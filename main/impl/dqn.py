@@ -26,7 +26,7 @@ default_hyperparam = {
     "TAU": 0.005,
     
     "LOSS_STRATEGY": "double",  # / fixed / standard
-    "IMPROVE_STRATEGY": "standard"  # / custom
+    "IMPROVE_STRATEGY": "custom_grad"  # / standard
 }
 
 
@@ -89,7 +89,7 @@ class DQN:
         self.IMPROVE_STRATEGY = hyperparams["IMPROVE_STRATEGY"] if "IMPROVE_STRATEGY" in hyperparams else default_hyperparam["IMPROVE_STRATEGY"]
         if self.IMPROVE_STRATEGY == "standard":
             self.IMPROVE_STRATEGY = self._improve_network
-        elif self.IMPROVE_STRATEGY == "custom":
+        elif self.IMPROVE_STRATEGY == "custom_grad":
             self.IMPROVE_STRATEGY = self._improve_network_gradient
         else:
             raise NotImplementedError(f"no improvement \"{self.IMPROVE_STRATEGY}\" implemented")

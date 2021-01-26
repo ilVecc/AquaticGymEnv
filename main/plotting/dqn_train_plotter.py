@@ -1,4 +1,3 @@
-from glob import glob
 from pathlib import Path
 from typing import List
 
@@ -53,17 +52,21 @@ class ProgressPlotter(object):
         plt.legend(title="Env Type", loc="upper left")
         
         if save:
+            plots_path = Path('plots')
+            plots_path.mkdir(parents=True, exist_ok=True)
             if len(self._store) == 1:
                 # just one env, reuse already loaded data
                 if policies_info["n_policies"] == 1:
                     # just one policy
-                    plt.savefig(str(Path(policies_info["policies"][0]) / "training_policy_success.png"))
+                    plot_policy_path = plots_path / Path(policies_info["policies"][0])
+                    plot_policy_path.mkdir(parents=True, exist_ok=True)
+                    plt.savefig(str(plot_policy_path / "training_policy_success.png"))
                 else:
                     # more than one policy
-                    plt.savefig(str(Path(policies_info["policies"][0]).parent / "training_env_success.png"))
+                    plot_policy_path = plots_path / Path(policies_info["policies"][0]).parent
+                    plot_policy_path.mkdir(parents=True, exist_ok=True)
+                    plt.savefig(str(plot_policy_path / "training_env_success.png"))
             else:
-                plots_path = Path('plots')
-                plots_path.mkdir(parents=True, exist_ok=True)
                 plt.savefig(str(plots_path / "training_overall_success.png"))
         plt.show()
     
@@ -105,17 +108,21 @@ class ProgressPlotter(object):
         plt.legend(title="Env Type", loc="upper left")
         
         if save:
+            plots_path = Path('plots')
+            plots_path.mkdir(parents=True, exist_ok=True)
             if len(self._store) == 1:
                 # just one env, reuse already loaded data
                 if policies_info["n_policies"] == 1:
                     # just one policy
-                    plt.savefig(str(Path(policies_info["policies"][0]) / "training_policy_rewards.png"))
+                    plot_policy_path = plots_path / Path(policies_info["policies"][0])
+                    plot_policy_path.mkdir(parents=True, exist_ok=True)
+                    plt.savefig(str(plot_policy_path / "training_policy_rewards.png"))
                 else:
                     # more than one policy
-                    plt.savefig(str(Path(policies_info["policies"][0]).parent / "training_env_rewards.png"))
+                    plot_policy_path = plots_path / Path(policies_info["policies"][0]).parent
+                    plot_policy_path.mkdir(parents=True, exist_ok=True)
+                    plt.savefig(str(plot_policy_path / "training_env_rewards.png"))
             else:
-                plots_path = Path('plots')
-                plots_path.mkdir(parents=True, exist_ok=True)
                 plt.savefig(str(plots_path / "training_overall_rewards.png"))
         plt.show()
     
@@ -145,7 +152,7 @@ class ProgressPlotter(object):
 
 if __name__ == "__main__":
     plotter = ProgressPlotter(fig_size=(12, 8))
-    plotter.load("No obstacles", glob("dqn_no_obs/*"), fetch=True)
-    plotter.load("With obstacles", glob("dqn_with_obs/*"), fetch=True)
+    plotter.load("No obstacles", ["example_policies/example_no_obs"], fetch=True)
+    plotter.load("With obstacles", ["example_policies/example_with_obs"], fetch=True)
     plotter.plot_training_rewards(save=True, window=500)
     plotter.plot_training_success(save=True, window=500)
